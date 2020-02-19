@@ -1,3 +1,5 @@
+# This code is based on "007-Kuril-section-model-lines-with-data-download-2020-Shakes.py"
+
 from obspy.clients.fdsn import Client
 from obspy import UTCDateTime, Stream, read
 from obspy.taup import TauPyModel
@@ -10,13 +12,14 @@ import matplotlib.pyplot as plt
 from geopy.geocoders import Nominatim
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
+import csv
 
 client = Client('http://fdsnws.raspberryshakedata.com')
 
 # Change this to your station
 STATION = {
     "network": "AM",
-    "id": "R21C3",
+    "code": "R21C3",
     "lat": 13.7207,
     "lon": 100.7701,
     "channel": "EHZ"
@@ -76,12 +79,54 @@ def plottext(xtxt, ytxt, phase, vertical, horizontal, color, textlist):
     plt.text(xtxt, ytxt, phase, verticalalignment=vertical, horizontalalignment=horizontal, color=color, fontsize=10)
     textlist.append((xtxt, ytxt))
 
+# text formatting function
+def nospaces(string):
+    out = ""
+    for l in string.upper():
+        if l in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
+            out += l
+        else:
+            out += "_"
+    return out
 
-#TODO Find earthquakes live, only query the ones within the specified mag (>=7.0 in this case), and graph
+#TODO Find earthquakes live and saved them as dict format (Most likely from USGS API)
+# only query the ones within the specified mag (>=7.0 in this case)
 
-# variables used to calculate stuffs
+# something like -> eq = Earthquake.getDataLive(parameters)
 
-# sta_dist = locations2degrees(eq["lat"], eq["lon"], STATION["lat"], STATION["lon"]) # distance to local station
-# eq_latlon = (eq["lat"], eq["lon"])
-# start_time = UTCDateTime(eq["time"])
-# end_time = start_time+DURATION
+# earthquake variables needed
+"""
+ sta_dist = locations2degrees(eq["lat"], eq["lon"], STATION["lat"], STATION["lon"]) # distance to local station
+ eq_latlon = (eq["lat"], eq["lon"])
+ start_time = UTCDateTime(eq["time"])
+ end_time = start_time+DURATION
+"""
+
+# Process seismic data
+# Get the list of seismometers from file and sort them
+# work out the distance of each seismometer from the epicentre and sort the list by distance from event
+seismometers = [] # empty list of seismometers
+
+# Changed to csv as I am more familiar with it than the formatting codes that the original author used
+
+"""
+with open(NETWORK_DATA) as f:
+    reader = csv.reader(f, delimiter=',')
+    for station in reader:
+        if station[0] != "Station Code": # ignore header row
+            distance = locations2degrees(eq["lat"], eq["lon"], float(station[2]), float(station[3]))
+
+        # station code, lat, long, distance in degrees are added into seismometers list when condition is right
+        if (distance <= MAX_DIST and distance >= MIN_DIST and station[0] not in EXCLUDE):
+            seismometers.append([station[0], round(float(station[2]),4), round(float(station[3]),4), round(distance,4)])
+"""
+
+seismometers.sort(key = lambda i: i[3]) # sort by distance
+
+# read in seismic traces
+waveform = Stream() # set up a blank stream variable
+dist = 0 # record of how far away the next seismometer is that we are looking for
+readit = False # flag to say that we have successfully read the data
+loaded_stations = [] # list of stations successfully loaded
+
+#TODO add more codes from the source code
