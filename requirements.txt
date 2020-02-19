@@ -1,0 +1,6 @@
+requests
+numpy
+scipy
+matplotlib
+geopy
+obspy
