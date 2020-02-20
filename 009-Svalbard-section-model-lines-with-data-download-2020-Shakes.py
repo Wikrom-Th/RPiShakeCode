@@ -29,24 +29,24 @@ client = Client('http://fdsnws.raspberryshakedata.com')
 
 # Start of parameters to define
 # Things that change for each earthquake event
-LABEL = "M6.9 Kuril, Russia" # Title to plot on figure
-EVT_TIME = "2020-02-13T10:33:44"  # origin time of event
-EVT_LAT = 45.668 # Latitude of event
-EVT_LON = 148.893 # Longitude of event
-EVT_Z = 142.6 # Depth of event in km
-FILE_STEM = 'Kuril' # folder name for saving mseed data files
+LABEL = "M5.2 North of Svalbard" # Title to plot on figure
+EVT_TIME = "2020-02-18T07:29:39"  # origin time of event
+EVT_LAT = 85.740 # Latitude of event
+EVT_LON = 22.699 # Longitude of event
+EVT_Z = 10 # Depth of event in km
+FILE_STEM = 'Svalbard' # folder name for saving mseed data files
 DECIMATION = 1 # decimation factor, can be up to 15 to keep 1 sample point in every 15, reduces memory usage on computer
 # Things to change once for your station
 NETWORK = 'AM'   # AM = RaspberryShake network
-STATION = "R7FA5"  # Station code of local station to plot
-STA_LAT = 50.2609  # Latitude of local station  
-STA_LON = -5.0434  # Longitude of local station
+STATION = "R5DDF"  # Station code of local station to plot
+STA_LAT = 30.09009009  # Latitude of local station  
+STA_LON = -95.445128  # Longitude of local station
 CHANNEL = 'EHZ'  # channel to grab data for (e.g. EHZ, SHZ, EHE, EHN)
 # configuration of the section plot
-DURATION = 1400  # Length in seconds of data to plot after origin time
+DURATION = 1000  # Length in seconds of data to plot after origin time
 MIN_DIST = 0 # minimum distance for a seismometer in degrees
-MAX_DIST = 180 # maximum distance in degrees
-STEP = 2.25 # step in degrees between seismometers
+MAX_DIST = 90 # maximum distance in degrees
+STEP = 0.5 # step in degrees between seismometers
 ANGLE_DX = 10 # angle between tick marks on x-axis of section
 PHASES = ["P", "pP", "PP", "S", "Pdiff", "PKP", "PKIKP", "PcP", "ScP", "ScS", "PKiKP", "SKiKP",
             "SKP", "SKS"] # list of phases for which to compute theoretical times
@@ -54,10 +54,10 @@ PHASE_PLOT = "spots" # choose lines or spots for phases
 DPI = 80 # dpi for plot
 FIG_SIZE = (1920/DPI, 1080/DPI) # size of figure in inches. Slightly bigger than PLOT_SIZE
 PLOT_SIZE = (FIG_SIZE[0]*DPI*0.75,FIG_SIZE[1]*DPI*0.75) # plot size in pixels with borders for labels
-F1 = 0.1  # High-pass filter corner for seismometers up to 90 degrees
-F2 = 3.0  # Low-pass filter corner 
-F3 = 0.4  # High-pass filter corner for seismometers from 90 degrees
-F4 = 1.2  # Low-pass filter corner 
+F1 = 0.5  # High-pass filter corner for seismometers up to 90 degrees
+F2 = 1.0  # Low-pass filter corner 
+F3 = 0.5  # High-pass filter corner for seismometers from 90 degrees
+F4 = 1.0  # Low-pass filter corner 
 MODEL = 'iasp91'  # Velocity model to predict travel-times through
 EXCLUDE = ['R6F29', 'R4355', 'R6324', 'RE063', 'RAE6A', 'REB59', 'R7143', 'R6F15', 'R49B6', 'RFF8B', 'R026F',
            'RBD93', 'R8D5C', 'R4FF5', 'RA211', 'RDD01', 'R2DB4', 'R16F7', 'RE8ED', 'REFF7', 'R9DAA', 'R6924',

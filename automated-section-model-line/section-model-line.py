@@ -128,5 +128,18 @@ waveform = Stream() # set up a blank stream variable
 dist = 0 # record of how far away the next seismometer is that we are looking for
 readit = False # flag to say that we have successfully read the data
 loaded_stations = [] # list of stations successfully loaded
+filtertext1 = ""
+filtertext2 = ""
+
+geolocator = Nominatim(user_agent="Raspberry Shake section plotter") # tool for getting place names (Nominatim queries data from osm)
+
+
+"""
+for station in seismometers:
+
+    # station considered here must not be your station.
+    # It must not also be within the STEP degrees with your station and the other stations that have been chosen
+    if (station[0] == STATION["code"]) or ((not((station[3] > sta_dist-STEP) and (station[3] < sta_dist+STEP))) and station[3] >= dist):
+"""
 
 #TODO add more codes from the source code
