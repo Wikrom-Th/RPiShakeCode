@@ -13,9 +13,9 @@ from geopy.geocoders import Nominatim
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import csv
+from get_usgs_eq_data import *
 
 client = Client('http://fdsnws.raspberryshakedata.com')
-
 
 DECIMATION = 1 # decimation factor, can be up to 15 to keep 1 sample point in every 15, reduces memory usage on computer
 
@@ -71,8 +71,6 @@ GLOBE_PHASES = [
 # Calculated constants
 COLORS = [ cm.plasma(x) for x in linspace(0, 0.8, len(PHASES)) ] # colours from 0.8-1.0 are not very visible
 
-# End of parameters to define
-
 # utility subroutines for data handling and plotting
 def plottext(xtxt, ytxt, phase, vertical, horizontal, color, textlist):
     clash = True
@@ -95,204 +93,198 @@ def nospaces(string):
             out += "_"
     return out
 
-# placeholder as the "test" earthquake
-eq = {
-    "label": "M6.9 Kuril, Russia",
-    "time": "2020-02-13T10:33:44",
-    "lat": 45.668,
-    "lon": 148.893,
-    "depth": 142.6
-}
+#TODO While True this (to really automate it), and loop with the current time (offseted the time by an amount in case the earthquake is not fully picked up by all stations)
+#TODO Thread the program to make it run faster (maybe based on count, with at most 4 thread running)
+#TODO Change the way the string parsing is done (from "+" to f-string, as to make it more readable)
 
-#TODO Find earthquakes live and saved them as dictionary format (Most likely from USGS API)
-# only query the ones within the specified mag (>=6.0 in this case)
+eq_list = get_eq(count_url, data_url)
 
-# something like -> eq = Earthquake.getDataLive(parameters)
+for eq in eq_list:
+    # earthquake variables needed
+    print(f"Processing model for {eq.label}")
 
-# earthquake variables needed
+    file_stem = eq.label[5:] # folder name for saving mseed data files
+    sta_dist = locations2degrees(eq.lat, eq.lon, STATION["lat"], STATION["lon"]) # distance to local station
+    eq_latlon = (eq.lat, eq.lon)
+    start_time = UTCDateTime(eq.time)
+    end_time = start_time+DURATION
 
-file_stem = eq["label"][5:] # folder name for saving mseed data files
-sta_dist = locations2degrees(eq["lat"], eq["lon"], STATION["lat"], STATION["lon"]) # distance to local station
-eq_latlon = (eq["lat"], eq["lon"])
-start_time = UTCDateTime(eq["time"])
-end_time = start_time+DURATION
+    # Process seismic data
+    # Get the list of seismometers from file and sort them
+    # work out the distance of each seismometer from the epicentre and sort the list by distance from event
+    seismometers = [] # empty list of seismometers
 
-# Process seismic data
-# Get the list of seismometers from file and sort them
-# work out the distance of each seismometer from the epicentre and sort the list by distance from event
-seismometers = [] # empty list of seismometers
+    # Changed to csv as I am more familiar with it than the formatting codes that the original author used
 
-# Changed to csv as I am more familiar with it than the formatting codes that the original author used
+    with open(NETWORK_DATA) as f:
+        reader = csv.reader(f, delimiter=',')
+        for station in reader:
+            if station[0] != "Station Code": # ignore header row
+                distance = locations2degrees(eq.lat, eq.lon, float(station[2]), float(station[3]))
 
-with open(NETWORK_DATA) as f:
-    reader = csv.reader(f, delimiter=',')
-    for station in reader:
-        if station[0] != "Station Code": # ignore header row
-            distance = locations2degrees(eq["lat"], eq["lon"], float(station[2]), float(station[3]))
+                # station code, lat, long, distance in degrees are added into seismometers list when condition is right
+                if (distance <= MAX_DIST and distance >= MIN_DIST and station[0] not in EXCLUDE):
+                    seismometers.append([station[0], round(float(station[2]),4), round(float(station[3]),4), round(distance,4)])
 
-            # station code, lat, long, distance in degrees are added into seismometers list when condition is right
-            if (distance <= MAX_DIST and distance >= MIN_DIST and station[0] not in EXCLUDE):
-                seismometers.append([station[0], round(float(station[2]),4), round(float(station[3]),4), round(distance,4)])
+    seismometers.sort(key = lambda i: i[3]) # sort by distance
 
-seismometers.sort(key = lambda i: i[3]) # sort by distance
+    # read in seismic traces
+    waveform = Stream() # set up a blank stream variable
+    dist = 0 # record of how far away the next seismometer is that we are looking for
+    readit = False # flag to say that we have successfully read the data
+    loaded_stations = [] # list of stations successfully loaded
+    filtertext1 = ""
+    filtertext2 = ""
 
-# read in seismic traces
-waveform = Stream() # set up a blank stream variable
-dist = 0 # record of how far away the next seismometer is that we are looking for
-readit = False # flag to say that we have successfully read the data
-loaded_stations = [] # list of stations successfully loaded
-filtertext1 = ""
-filtertext2 = ""
-
-geolocator = Nominatim(user_agent="Raspberry Shake section plotter") # tool for getting place names
-for station in seismometers:
-    if station[0] == STATION["code"] or ((not((station[3] > sta_dist-STEP) and (station[3] < sta_dist+STEP))) and station[3] >= dist):
-        # read in Raspberry Shake
-        if readit == False:
-            try:
-                # Download and filter data
-                st = client.get_waveforms(STATION["network"], station[0], "00", STATION["channel"], starttime=start_time, endtime=end_time + DURATION)
-                st.merge(method=0, fill_value='latest')
-                st.detrend(type='demean')
-                if station[3] <= 90:
-                    st.filter('bandpass', freqmin=F1, freqmax=F2)
-                    filtertext1 = "Bandpass Filter: freqmin="+str(F1)+", freqmax="+str(F2)+" at up to 90 degrees."
-                else:
-                    st.filter('bandpass', freqmin=F3, freqmax=F4)
-                    filtertext2 = "Bandpass Filter: freqmin="+str(F3)+", freqmax="+str(F4)+" at greater than 90 degrees."
-                st.decimate(DECIMATION)
-                test = st.slice(start_time, end_time)
-                if len(test) > 0:
-                    if station[0] == STATION["code"]: # make an additional copy to blacken plot
-                        waveform += st.slice(start_time, end_time)    
-                        loaded_stations.append(station)
-                        sta_x = len(loaded_stations)-1
-                    waveform += st.slice(start_time, end_time)
-                    readit = True
-                else:
+    geolocator = Nominatim(user_agent="Raspberry Shake section plotter") # tool for getting place names
+    for station in seismometers:
+        if station[0] == STATION["code"] or ((not((station[3] > sta_dist-STEP) and (station[3] < sta_dist+STEP))) and station[3] >= dist):
+            # read in Raspberry Shake
+            if readit == False:
+                try:
+                    # Download and filter data
+                    st = client.get_waveforms(STATION["network"], station[0], "00", STATION["channel"], starttime=start_time, endtime=end_time + DURATION)
+                    st.merge(method=0, fill_value='latest')
+                    st.detrend(type='demean')
+                    if station[3] <= 90:
+                        st.filter('bandpass', freqmin=F1, freqmax=F2)
+                        filtertext1 = "Bandpass Filter: freqmin="+str(F1)+", freqmax="+str(F2)+" at up to 90 degrees."
+                    else:
+                        st.filter('bandpass', freqmin=F3, freqmax=F4)
+                        filtertext2 = "Bandpass Filter: freqmin="+str(F3)+", freqmax="+str(F4)+" at greater than 90 degrees."
+                    st.decimate(DECIMATION)
+                    test = st.slice(start_time, end_time)
+                    if len(test) > 0:
+                        if station[0] == STATION["code"]: # make an additional copy to blacken plot
+                            waveform += st.slice(start_time, end_time)    
+                            loaded_stations.append(station)
+                            sta_x = len(loaded_stations)-1
+                        waveform += st.slice(start_time, end_time)
+                        readit = True
+                    else:
+                        readit = False
+                except:
                     readit = False
+        if readit == True:
+            # locate the seismometer and add this to the station record
+            try:
+                location = geolocator.reverse(str(station[1]) + ", " + str(station[2]))
+                address_list = location.address.split(",")
             except:
-                readit = False
-    if readit == True:
-        # locate the seismometer and add this to the station record
-        try:
-            location = geolocator.reverse(str(station[1]) + ", " + str(station[2]))
-            address_list = location.address.split(",")
-        except:
-            location = "Unknown"
-            address_list = location
-        if len(address_list) > 4:
-            address = ",".join(address_list[-1*(len(address_list)-2):]).strip() # remove the two most specific parts
-        else:
-            address = ",".join(address_list[:]).strip() # use the whole address
-        station.append(address)
-        loaded_stations.append(station)
-        print(station[0], "Lat:", station[1], "Lon:", station[2], "Dist:", station[3], "degrees, Address:", station[4])
-        # reset the search to look beyond the current station by STEP
-        readit = False
-        if dist <= station[3]:
-            dist = station[3] + STEP
-
-if len(waveform) == len(loaded_stations):
-# add station details to the waveforms and print out the details for interest
-    for y in range(len(waveform)):
-        waveform[y].stats["coordinates"] = {} # add the coordinates to the dictionary, needed for the section plot
-        waveform[y].stats["coordinates"]["latitude"] = loaded_stations[y][1]
-        waveform[y].stats["coordinates"]["longitude"] = loaded_stations[y][2]
-        waveform[y].stats["distance"] = loaded_stations[y][3]
-        # Set the abbreviated name of the location in the network field for the plot title
-        waveform[y].stats.network = STATION["network"]
-        waveform[y].stats.station = loaded_stations[y][0]
-
-        waveform[y].stats.location = loaded_stations[y][4]
-        waveform[y].stats.channel = STATION["channel"]
-        print("--------------------------------------------------------------------------------------------------------")
-        print(loaded_stations[y][0], "Lat:", loaded_stations[y][1], "Lon:", loaded_stations[y][2], "Dist:",
-              loaded_stations[y][3], "degrees, Address:", loaded_stations[y][4])
-        print("\n", waveform[y].stats, "\n")
-
-# Create the section plot..
-    fig = plt.figure(figsize=FIG_SIZE, dpi=DPI)
-    plt.title('Section plot for '+eq["label"]+' '+eq["time"]+" lat:"+str(eq["lat"])+" lon:"+str(eq["lon"]), fontsize=12, y=1.07)
-    # set up the plot area
-    plt.xlabel("Angle (degrees)")
-    plt.ylabel("Elapsed time (seconds)")
-    plt.suptitle("Modelled arrival times for phases using " + MODEL + " with a focal depth of " + str(eq["depth"]) + "km", fontsize=10)
-    # plot the waveforms
-    waveform.plot(size=PLOT_SIZE, type='section', recordlength=DURATION, linewidth=1.5, grid_linewidth=.5, show=False, fig=fig, color='black', method='full', starttime=start_time, plot_dx=ANGLE_DX, ev_coord = eq_latlon, dist_degree=True, alpha=0.50, time_down=True)
-    ax = fig.axes[0]
-    transform = blended_transform_factory(ax.transData, ax.transAxes)
-    for tr in waveform:
-        ax.text(float(tr.stats.distance), 1.0, tr.stats.station, rotation=270,
-                va="bottom", ha="center", transform=transform, zorder=10, fontsize=8)
-    # Add the local station name in red
-    ax.text(float(waveform[sta_x].stats.distance), 1.0, waveform[sta_x].stats.station, rotation=270,
-            va="bottom", ha="center", transform=transform, zorder=10, fontsize=8, color = 'red')
-
-    # print out the filters that have been used
-    plt.text(0, DURATION *1.05, filtertext1)
-    plt.text(0, DURATION *1.07, filtertext2)
-
-# Print the coloured phases over the seismic section
-    textlist = [] # list of text on plot, to avoid over-writing
-    for j, color in enumerate(COLORS):
-        phase = PHASES[j]
-        x=[]
-        y=[]
-        model = TauPyModel(model=MODEL)
-        for dist in range(MIN_DIST, MAX_DIST+1, 1): # calculate and plot one point for each degree from 0-180
-            arrivals = model.get_travel_times(source_depth_in_km=eq["depth"],distance_in_degree=dist, phase_list=[phase])
-            printed = False
-            for i in range(len(arrivals)):
-                instring = str(arrivals[i])
-                phaseline = instring.split(" ")
-                if phaseline[0] == phase and printed == False and int(dist) > 0 and int(dist) < 180 and float(phaseline[4])>0 and float(phaseline[4])<DURATION:
-                    x.append(int(dist))
-                    y.append(float(phaseline[4]))
-                    printed = True
-            if PHASE_PLOT == "spots":
-                plt.scatter(x, y, color=color, alpha=0.1, s=1)
+                location = "Unknown"
+                address_list = location
+            if len(address_list) > 4:
+                address = ",".join(address_list[-1*(len(address_list)-2):]).strip() # remove the two most specific parts
             else:
-                plt.plot(x, y, color=color, linewidth=0.3, linestyle='solid', alpha=0.1)
-        if len(x) > 0 and len(y) > 0: # this function prevents text being overwritten
-            plottext(x[0], y[0], phase, 'top', 'right', color, textlist)
-            plottext(x[len(x)-1], y[len(y)-1], phase, 'top', 'left', color, textlist)
+                address = ",".join(address_list[:]).strip() # use the whole address
+            station.append(address)
+            loaded_stations.append(station)
+            print(station[0], "Lat:", station[1], "Lon:", station[2], "Dist:", station[3], "degrees, Address:", station[4])
+            # reset the search to look beyond the current station by STEP
+            readit = False
+            if dist <= station[3]:
+                dist = station[3] + STEP
+
+    if len(waveform) == len(loaded_stations):
+    # add station details to the waveforms and print out the details for interest
+        for y in range(len(waveform)):
+            waveform[y].stats["coordinates"] = {} # add the coordinates to the dictionary, needed for the section plot
+            waveform[y].stats["coordinates"]["latitude"] = loaded_stations[y][1]
+            waveform[y].stats["coordinates"]["longitude"] = loaded_stations[y][2]
+            waveform[y].stats["distance"] = loaded_stations[y][3]
+            # Set the abbreviated name of the location in the network field for the plot title
+            waveform[y].stats.network = STATION["network"]
+            waveform[y].stats.station = loaded_stations[y][0]
+
+            waveform[y].stats.location = loaded_stations[y][4]
+            waveform[y].stats.channel = STATION["channel"]
+            print("--------------------------------------------------------------------------------------------------------")
+            print(loaded_stations[y][0], "Lat:", loaded_stations[y][1], "Lon:", loaded_stations[y][2], "Dist:",
+                loaded_stations[y][3], "degrees, Address:", loaded_stations[y][4])
+            print("\n", waveform[y].stats, "\n")
+
+    # Create the section plot..
+        fig = plt.figure(figsize=FIG_SIZE, dpi=DPI)
+        plt.title('Section plot for '+eq.label+' '+eq.time+" lat:"+str(eq.lat)+" lon:"+str(eq.lon), fontsize=12, y=1.07)
+        # set up the plot area
+        plt.xlabel("Angle (degrees)")
+        plt.ylabel("Elapsed time (seconds)")
+        plt.suptitle("Modelled arrival times for phases using " + MODEL + " with a focal depth of " + str(eq.depth) + "km", fontsize=10)
+        # plot the waveforms
+        waveform.plot(size=PLOT_SIZE, type='section', recordlength=DURATION, linewidth=1.5, grid_linewidth=.5, show=False, fig=fig, color='black', method='full', starttime=start_time, plot_dx=ANGLE_DX, ev_coord = eq_latlon, dist_degree=True, alpha=0.50, time_down=True)
+        ax = fig.axes[0]
+        transform = blended_transform_factory(ax.transData, ax.transAxes)
+        for tr in waveform:
+            ax.text(float(tr.stats.distance), 1.0, tr.stats.station, rotation=270,
+                    va="bottom", ha="center", transform=transform, zorder=10, fontsize=8)
+        # Add the local station name in red
+        ax.text(float(waveform[sta_x].stats.distance), 1.0, waveform[sta_x].stats.station, rotation=270,
+                va="bottom", ha="center", transform=transform, zorder=10, fontsize=8, color = 'red')
+
+        # print out the filters that have been used
+        plt.text(0, DURATION *1.05, filtertext1)
+        plt.text(0, DURATION *1.07, filtertext2)
+
+    # Print the coloured phases over the seismic section
+        textlist = [] # list of text on plot, to avoid over-writing
+        for j, color in enumerate(COLORS):
+            phase = PHASES[j]
+            x=[]
+            y=[]
+            model = TauPyModel(model=MODEL)
+            for dist in range(MIN_DIST, MAX_DIST+1, 1): # calculate and plot one point for each degree from 0-180
+                arrivals = model.get_travel_times(source_depth_in_km=eq.depth,distance_in_degree=dist, phase_list=[phase])
+                printed = False
+                for i in range(len(arrivals)):
+                    instring = str(arrivals[i])
+                    phaseline = instring.split(" ")
+                    if phaseline[0] == phase and printed == False and int(dist) > 0 and int(dist) < 180 and float(phaseline[4])>0 and float(phaseline[4])<DURATION:
+                        x.append(int(dist))
+                        y.append(float(phaseline[4]))
+                        printed = True
+                if PHASE_PLOT == "spots":
+                    plt.scatter(x, y, color=color, alpha=0.1, s=1)
+                else:
+                    plt.plot(x, y, color=color, linewidth=0.3, linestyle='solid', alpha=0.1)
+            if len(x) > 0 and len(y) > 0: # this function prevents text being overwritten
+                plottext(x[0], y[0], phase, 'top', 'right', color, textlist)
+                plottext(x[len(x)-1], y[len(y)-1], phase, 'top', 'left', color, textlist)
+                
+    # Add the inset picture of the globe at x, y, width, height, as a fraction of the parent plot
+        ax1 = fig.add_axes([0.63, 0.44, 0.4, 0.4], polar=True)
+        # Plot all pre-determined phases
+        for phase, distance in GLOBE_PHASES:
+            arrivals = model.get_ray_paths(142.6, distance, phase_list=[phase])
+            ax1 = arrivals.plot_rays(plot_type='spherical',
+                                    legend=False, label_arrivals=False,
+                                    plot_all=True,
+                                    show=False, ax=ax1)
             
-# Add the inset picture of the globe at x, y, width, height, as a fraction of the parent plot
-    ax1 = fig.add_axes([0.63, 0.44, 0.4, 0.4], polar=True)
-    # Plot all pre-determined phases
-    for phase, distance in GLOBE_PHASES:
-        arrivals = model.get_ray_paths(142.6, distance, phase_list=[phase])
-        ax1 = arrivals.plot_rays(plot_type='spherical',
-                                legend=False, label_arrivals=False,
-                                plot_all=True,
-                                show=False, ax=ax1)
-        
-    # Annotate regions of the globe
-    ax1.text(0, 0, 'Solid\ninner\ncore',
-            horizontalalignment='center', verticalalignment='center',
-            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
-    ocr = (model.model.radius_of_planet -
-           (model.model.s_mod.v_mod.iocb_depth +
-            model.model.s_mod.v_mod.cmb_depth) / 2)
-    ax1.text(np.deg2rad(180), ocr, 'Fluid outer core',
-            horizontalalignment='center',
-            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
-    mr = model.model.radius_of_planet - model.model.s_mod.v_mod.cmb_depth / 2
-    ax1.text(np.deg2rad(180), mr, 'Solid mantle',
-            horizontalalignment='center',
-            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
-    rad = model.model.radius_of_planet*1.15
-    for phase in GLOBE_PHASES:
-        ax1.text(np.deg2rad(phase[1]), rad, phase[0],
-            horizontalalignment='center',
-            bbox=dict(facecolor='white', edgecolor='none', alpha=0))
+        # Annotate regions of the globe
+        ax1.text(0, 0, 'Solid\ninner\ncore',
+                horizontalalignment='center', verticalalignment='center',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
+        ocr = (model.model.radius_of_planet -
+            (model.model.s_mod.v_mod.iocb_depth +
+                model.model.s_mod.v_mod.cmb_depth) / 2)
+        ax1.text(np.deg2rad(180), ocr, 'Fluid outer core',
+                horizontalalignment='center',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
+        mr = model.model.radius_of_planet - model.model.s_mod.v_mod.cmb_depth / 2
+        ax1.text(np.deg2rad(180), mr, 'Solid mantle',
+                horizontalalignment='center',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
+        rad = model.model.radius_of_planet*1.15
+        for phase in GLOBE_PHASES:
+            ax1.text(np.deg2rad(phase[1]), rad, phase[0],
+                horizontalalignment='center',
+                bbox=dict(facecolor='white', edgecolor='none', alpha=0))
 
-# Save the plot to file, then print to screen
-    plt.savefig(nospaces(eq["label"])+'-Section.png')
-    plt.show()
+    # Save the plot to file, then print to screen
+        plt.savefig(nospaces(eq.label)+'-Section.png')
+        plt.show()
 
-# report an error if the number of seismometers does not match the number of waveforms
-else:
-    print("Number of waveforms does not match number of seismometers, a seismometer may not have data in the required range")
-    print(len(waveform), "waveforms", len(seismometers), "seismometers")
+    # report an error if the number of seismometers does not match the number of waveforms
+    else:
+        print("Number of waveforms does not match number of seismometers, a seismometer may not have data in the required range")
+        print(len(waveform), "waveforms", len(seismometers), "seismometers")
