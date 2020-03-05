@@ -121,7 +121,7 @@ if choice == 2:
     endtime = str(input())
 
     count_url, data_url = parse_url(minmag, maxmag, starttime, endtime)
-    get_eq(count_url, data_url)
+    eq_list = get_eq(count_url, data_url)
 
 for eq in eq_list:
     # earthquake variables needed

@@ -60,8 +60,12 @@ def parse_url(minmag, maxmag=10, starttime="", endtime=""):
     count_url = f"{api_url}count?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
     data_url = f"{api_url}query?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
 
-    if starttime != "" and endtime != "":
-        starttime += f"&starttime={starttime}&endtime={endtime}"
-        endtime += f"&starttime={starttime}&endtime={endtime}"
+    if starttime != "":
+        count_url += f"&starttime={starttime}"
+        data_url += f"&starttime={starttime}"
+
+    if endtime != "":
+        count_url += f"&endtime={endtime}"
+        data_url += f"&endtime={endtime}"
 
     return count_url, data_url
