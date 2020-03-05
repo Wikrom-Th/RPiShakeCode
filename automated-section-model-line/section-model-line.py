@@ -29,7 +29,7 @@ STATION = {
 }
 
 # configuration of the section plot
-DURATION = 1400  # Length in seconds of data to plot after origin time
+DURATION = 1500  # Length in seconds of data to plot after origin time
 MIN_DIST = 0 # minimum distance for a seismometer in degrees
 MAX_DIST = 180 # maximum distance in degrees
 STEP = 2.25 # step in degrees between seismometers
@@ -40,10 +40,10 @@ PHASE_PLOT = "spots" # choose lines or spots for phases
 DPI = 80 # dpi for plot
 FIG_SIZE = (1920/DPI, 1080/DPI) # size of figure in inches. Slightly bigger than PLOT_SIZE
 PLOT_SIZE = (FIG_SIZE[0]*DPI*0.75,FIG_SIZE[1]*DPI*0.75) # plot size in pixels with borders for labels
-F1 = 0.1  # High-pass filter corner for seismometers up to 90 degrees
-F2 = 3.0  # Low-pass filter corner 
-F3 = 0.4  # High-pass filter corner for seismometers from 90 degrees
-F4 = 1.2  # Low-pass filter corner 
+F1 = 0.2  # High-pass filter corner for seismometers up to 90 degrees
+F2 = 1.0  # Low-pass filter corner 
+F3 = 0.2  # High-pass filter corner for seismometers from 90 degrees
+F4 = 1.0  # Low-pass filter corner 
 MODEL = 'iasp91'  # Velocity model to predict travel-times through
 EXCLUDE = ['R6F29', 'R4355', 'R6324', 'RE063', 'RAE6A', 'REB59', 'R7143', 'R6F15', 'R49B6', 'RFF8B', 'R026F',
            'RBD93', 'R8D5C', 'R4FF5', 'RA211', 'RDD01', 'R2DB4', 'R16F7', 'RE8ED', 'REFF7', 'R9DAA', 'R6924',
@@ -97,7 +97,31 @@ def nospaces(string):
 #TODO Thread the program to make it run faster (maybe based on count, with at most 4 thread running)
 #TODO Change the way the string parsing is done (from "+" to f-string, as to make it more readable)
 
-eq_list = get_eq(count_url, data_url)
+print("Please choose the data to run (select a number)")
+print("6.0 and above earthquake from the previous month - 1")
+print("Custom magnitude from specific time range - 2")
+
+choice = int(input())
+
+if choice == 1:
+    count_url, data_url = parse_url(6)
+    eq_list = get_eq(count_url, data_url)
+
+if choice == 2:
+    print("Minimum magnitude")
+    minmag = float(input())
+
+    print("Maximum magnitude")
+    maxmag = float(input())
+
+    print("Start time")
+    starttime = str(input())
+
+    print("End time")
+    endtime = str(input())
+
+    count_url, data_url = parse_url(minmag, maxmag, starttime, endtime)
+    get_eq(count_url, data_url)
 
 for eq in eq_list:
     # earthquake variables needed

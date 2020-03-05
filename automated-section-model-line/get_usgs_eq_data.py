@@ -8,10 +8,6 @@ api_url = "https://earthquake.usgs.gov/fdsnws/event/1/"
 data_format = "geojson"
 eventtype = "earthquake"
 
-# magnitude of interest
-minmag = "6"
-maxmag = "10"
-
 # for checking the total earthquakes acquired
 total_earthquakes = 0
 
@@ -32,10 +28,6 @@ class Earthquake:
     def format_time(self, unformatted_time):
         dt = datetime.datetime.utcfromtimestamp(unformatted_time/1000).isoformat()
         return dt
-
-
-count_url = f"{api_url}count?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
-data_url = f"{api_url}query?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
 
 def get_eq(count_url, data_url):
     eq_list = []
@@ -64,8 +56,12 @@ def get_eq(count_url, data_url):
     
     return eq_list
 
-def get_eq_from(time):
-    count_url += f"&starttime={time}"
-    data_url += f"&starttime={time}"
+def parse_url(minmag, maxmag=10, starttime="", endtime=""):
+    count_url = f"{api_url}count?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
+    data_url = f"{api_url}query?format={data_format}&minmagnitude={minmag}&maxmagnitude={maxmag}&eventtype={eventtype}"
 
-    return get_eq(count_url, data_url)
+    if starttime != "" and endtime != "":
+        starttime += f"&starttime={starttime}&endtime={endtime}"
+        endtime += f"&starttime={starttime}&endtime={endtime}"
+
+    return count_url, data_url
