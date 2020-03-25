@@ -159,6 +159,7 @@ for eq in eq_list:
     loaded_stations = [] # list of stations successfully loaded
     filtertext1 = ""
     filtertext2 = ""
+    sta_x = 0
 
     geolocator = Nominatim(user_agent="Raspberry Shake section plotter") # tool for getting place names
     for station in seismometers:
